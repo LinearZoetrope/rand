@@ -843,6 +843,7 @@ pub struct Closed01<F>(pub F);
 /// The standard RNG. This is designed to be efficient on the current
 /// platform.
 #[derive(Copy, Clone, Debug)]
+#[cfg_attr(feature="serde-1",derive(Serialize,Deserialize))]
 pub struct StdRng {
     rng: IsaacWordRng,
 }
@@ -1304,5 +1305,27 @@ mod test {
         let mut rb: StdRng = SeedableRng::from_seed(&s[..]);
         assert!(iter_eq(ra.gen_ascii_chars().take(100),
                         rb.gen_ascii_chars().take(100)));
+    }
+
+    #[cfg(feature="serde-1")]
+    #[test]
+    fn test_std_rng_serde() {
+        use bincode;
+        use std::io::{BufWriter, BufReader};
+
+        let seed = thread_rng().gen_iter::<usize>().take(256).collect::<Vec<usize>>();
+        let mut rng: StdRng = SeedableRng::from_seed(&seed[..]);
+
+        let buf: Vec<u8> = Vec::new();
+        let mut buf = BufWriter::new(buf);
+        bincode::serialize_into(&mut buf, &rng, bincode::Infinite).expect("Could not serialize");
+
+        let buf = buf.into_inner().unwrap();
+        let mut read = BufReader::new(&buf[..]);
+        let mut deserialized: StdRng = bincode::deserialize_from(&mut read, bincode::Infinite).expect("Could not deserialize");
+
+        for _ in 0..16 {
+            assert_eq!(rng.next_u64(), deserialized.next_u64());
+        }
     }
 }
