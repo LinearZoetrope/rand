@@ -721,6 +721,207 @@ impl fmt::Debug for Isaac64Rng {
     }
 }
 
+#[cfg(feature = "serde-1")]
+impl Serialize for Isaac64Rng {
+    fn serialize<S>(&self, ser: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        use serde::ser::SerializeStruct;
+
+        fn unwrap_u64(wrapped: &[w64; RAND_SIZE_USIZE], buf: &mut [u64]) {
+            debug_assert_eq!(buf.len(), wrapped.len());
+            for (i,&w(val)) in wrapped.iter().enumerate() {
+                buf[i] = val;
+            }
+        }
+
+        let mut buf = vec![0;RAND_SIZE_USIZE];
+
+        let mut state = ser.serialize_struct("Isaac64Rng",6)?;
+
+        state.serialize_field("cnt", &self.cnt)?;
+
+        /* Unlike ChaCha, we need vecs here because the auto-derives don't go up
+        to 256-element arrays */
+
+        unwrap_u64(&self.rsl, &mut buf);
+        state.serialize_field("rsl", &buf)?;
+
+        unwrap_u64(&self.mem, &mut buf);
+        state.serialize_field("mem", &buf)?;
+
+        let w(a) = self.a;
+        state.serialize_field("a", &a)?;
+
+        let w(b) = self.b;
+        state.serialize_field("b", &b)?;
+
+        let w(c) = self.c;
+        state.serialize_field("c", &c)?;
+
+        state.end()
+    }
+}
+
+#[cfg(feature="serde-1")]
+impl<'de> Deserialize<'de> for Isaac64Rng {
+    fn deserialize<D>(de: D) -> Result<Isaac64Rng, D::Error>
+        where D: Deserializer<'de> {
+            use serde::de::{SeqAccess,MapAccess};
+            use serde::de;
+
+            enum Field { Cnt, Rsl, Mem, A, B, C };
+
+            impl<'de> Deserialize<'de> for Field {
+                fn deserialize<D>(deserializer: D) -> Result<Field, D::Error>
+                    where D: Deserializer<'de> {
+                        struct IsaacFieldVisitor;
+                        impl<'de> Visitor<'de> for IsaacFieldVisitor {
+                            type Value = Field;
+
+                            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                                formatter.write_str("`cnt`, `rsl`, `mem`, `a`, `b`, or `c`")
+                            }
+
+                            fn visit_str<E>(self, value: &str) -> Result<Field,E>
+                                where E: de::Error {
+                                    match value {
+                                        "cnt" => Ok(Field::Cnt),
+                                        "rsl" => Ok(Field::Rsl),
+                                        "mem" => Ok(Field::Mem),
+                                        "a" => Ok(Field::A),
+                                        "b" => Ok(Field::B),
+                                        "c" => Ok(Field::C),
+                                        _ => Err(de::Error::unknown_field(value, FIELDS))
+                                    }
+                                }
+                        }
+                        deserializer.deserialize_identifier(IsaacFieldVisitor)
+                    }
+            }
+
+            struct IsaacVisitor;
+
+            fn wrap_u64(unwrapped: &[u64]) -> [w64;RAND_SIZE_USIZE] {
+                let mut buf = [w(0); RAND_SIZE_USIZE];
+                for (i,&val) in unwrapped.into_iter().enumerate() {
+                    buf[i] = w(val);
+                }
+                buf
+            }
+
+            const FIELDS: &[&'static str] = &["cnt","rsl", "mem","a", "b", "c"];
+
+            impl<'de> Visitor<'de> for IsaacVisitor {
+                type Value = Isaac64Rng;
+
+                fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                    formatter.write_str("struct Isaac64Rng")
+                }
+
+                fn visit_seq<V>(self, mut seq: V) -> Result<Isaac64Rng, V::Error>
+                    where V: SeqAccess<'de> {
+                        let cnt: usize = seq.next_element()?
+                            .ok_or_else(|| de::Error::invalid_length(0,&self))?;
+                        
+                        let rsl: Vec<u64> = seq.next_element()?
+                            .ok_or_else(|| de::Error::invalid_length(1, &self))?;
+                        
+                        let mem: Vec<u64> = seq.next_element()?
+                            .ok_or_else(|| de::Error::invalid_length(2, &self))?;
+                        
+                        let a: u64 = seq.next_element()?
+                            .ok_or_else(|| de::Error::invalid_length(3, &self))?;
+                        
+                        let b: u64 = seq.next_element()?
+                            .ok_or_else(|| de::Error::invalid_length(4, &self))?;
+                        
+                        let c: u64 = seq.next_element()?
+                            .ok_or_else(|| de::Error::invalid_length(5, &self))?;
+                        
+                        let rsl = wrap_u64(&rsl);
+                        let mem = wrap_u64(&mem);
+
+                        let (a,b,c) = (w(a), w(b), w(c));
+
+                        Ok(Isaac64Rng {
+                            cnt, rsl, mem, a, b, c,
+                        })
+                }
+
+                fn visit_map<V>(self, mut map: V) -> Result<Isaac64Rng, V::Error>
+                where V: MapAccess<'de>
+                {
+                    let mut cnt = None;
+                    let mut rsl: Option<Vec<u64>> = None;
+                    let mut mem: Option<Vec<u64>> = None;
+                    let mut a = None;
+                    let mut b = None;
+                    let mut c = None;
+
+                    while let Some(key) = map.next_key()? {
+                        match key {
+                            Field::Cnt => {
+                                if cnt.is_some() {
+                                    return Err(de::Error::duplicate_field("cnt"));
+                                }
+                                cnt = Some(map.next_value()?);
+                            }
+                            Field::Rsl => {
+                                if rsl.is_some() {
+                                    return Err(de::Error::duplicate_field("rsl"));
+                                }
+                                rsl = Some(map.next_value()?);
+                            }
+                            Field::Mem => {
+                                if mem.is_some() {
+                                    return Err(de::Error::duplicate_field("mem"));
+                                }
+                                mem = Some(map.next_value()?);
+                            }
+                            Field::A => {
+                                if a.is_some() {
+                                    return Err(de::Error::duplicate_field("a"));
+                                }
+                                a = Some(map.next_value()?);
+                            }
+                            Field::B => {
+                                if b.is_some() {
+                                    return Err(de::Error::duplicate_field("b"));
+                                }
+                                b = Some(map.next_value()?);
+                            }
+                            Field::C => {
+                                if c.is_some() {
+                                    return Err(de::Error::duplicate_field("c"));
+                                }
+                                c = Some(map.next_value()?);
+                            }
+                        }
+                    }
+                    let cnt = cnt.ok_or_else(|| de::Error::missing_field("cnt"))?;
+                    let rsl = rsl.ok_or_else(|| de::Error::missing_field("rsl"))?;
+                    let mem = mem.ok_or_else(|| de::Error::missing_field("mem"))?;
+                    let a = a.ok_or_else(|| de::Error::missing_field("a"))?;
+                    let b = b.ok_or_else(|| de::Error::missing_field("b"))?;
+                    let c = c.ok_or_else(|| de::Error::missing_field("c"))?;
+
+                    let rsl = wrap_u64(&rsl);
+                    let mem = wrap_u64(&mem);
+
+                    let (a,b,c) = (w(a),w(b),w(c));
+
+                    Ok(Isaac64Rng {
+                        cnt, rsl, mem, a, b, c,
+                    })
+                }
+            }
+
+            de.deserialize_struct("Isaac64Rng", FIELDS, IsaacVisitor)
+        }
+}
+
 #[cfg(test)]
 mod test {
     use {Rng, SeedableRng};
@@ -854,6 +1055,40 @@ mod test {
         let buf = buf.into_inner().unwrap();
         let mut read = BufReader::new(&buf[..]);
         let mut deserialized: IsaacRng = bincode::deserialize_from(&mut read, bincode::Infinite).expect("Could not deserialize");
+
+        assert_eq!(rng.cnt, deserialized.cnt);
+        /* Can't assert directly because of the array size */
+        for (orig,deser) in rng.rsl.iter().zip(deserialized.rsl.iter()) {
+            assert_eq!(orig, deser);
+        }
+        for (orig,deser) in rng.mem.iter().zip(deserialized.mem.iter()) {
+            assert_eq!(orig, deser);
+        }
+        assert_eq!(rng.a, deserialized.a);
+        assert_eq!(rng.b, deserialized.b);
+        assert_eq!(rng.c, deserialized.c);
+
+        for _ in 0..16 {
+            assert_eq!(rng.next_u64(), deserialized.next_u64());
+        }
+    }
+
+        #[test]
+    #[cfg(feature="serde-1")]
+    fn test_rng_64_serde() {
+        use bincode;
+        use std::io::{BufWriter, BufReader};
+
+        let seed: &[_] = &[1, 23, 456, 7890, 12345];
+        let mut rng: Isaac64Rng = SeedableRng::from_seed(seed);
+
+        let buf: Vec<u8> = Vec::new();
+        let mut buf = BufWriter::new(buf);
+        bincode::serialize_into(&mut buf, &rng, bincode::Infinite).expect("Could not serialize");
+
+        let buf = buf.into_inner().unwrap();
+        let mut read = BufReader::new(&buf[..]);
+        let mut deserialized: Isaac64Rng = bincode::deserialize_from(&mut read, bincode::Infinite).expect("Could not deserialize");
 
         assert_eq!(rng.cnt, deserialized.cnt);
         /* Can't assert directly because of the array size */
