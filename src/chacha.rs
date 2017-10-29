@@ -11,10 +11,16 @@
 //! The ChaCha random number generator.
 
 use std::num::Wrapping as w;
-use {Rng, SeedableRng, Rand, w32};
+use {Rand, Rng, SeedableRng, w32};
+#[cfg(feature = "serde-1")]
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+#[cfg(feature="serde-1")]
+use serde::de::Visitor;
+#[cfg(feature="serde-1")]
+use std::fmt;
 
-const KEY_WORDS    : usize =  8; // 8 words for the 256-bit key
-const STATE_WORDS  : usize = 16;
+const KEY_WORDS: usize = 8; // 8 words for the 256-bit key
+const STATE_WORDS: usize = 16;
 const CHACHA_ROUNDS: u32 = 20; // Cryptographically secure from 8 upwards as of this writing
 
 /// A random number generator that uses the ChaCha20 algorithm [1].
@@ -228,6 +234,152 @@ impl Rand for ChaChaRng {
     }
 }
 
+#[cfg(feature = "serde-1")]
+impl Serialize for ChaChaRng {
+    fn serialize<S>(&self, ser: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        use serde::ser::SerializeStruct;
+
+        fn unwrap_u32(wrapped: &[w32; STATE_WORDS], buf: &mut [u32; STATE_WORDS]) {
+            for (i,&w(val)) in wrapped.iter().enumerate() {
+                buf[i] = val;
+            }
+        }
+
+        let mut buf: [u32; STATE_WORDS] = Default::default();
+
+        let mut state = ser.serialize_struct("ChaChaRng",3)?;
+        unwrap_u32(&self.buffer, &mut buf);
+        state.serialize_field("buffer", &buf)?;
+
+        unwrap_u32(&self.state, &mut buf);
+        state.serialize_field("state", &buf)?;
+
+        state.serialize_field("index", &self.index)?;
+
+        state.end()
+    }
+}
+
+#[cfg(feature="serde-1")]
+impl<'de> Deserialize<'de> for ChaChaRng {
+    fn deserialize<D>(de: D) -> Result<ChaChaRng, D::Error>
+        where D: Deserializer<'de> {
+            use serde::de::{SeqAccess,MapAccess};
+            use serde::de;
+
+            enum Field { Buffer, State, Index };
+
+            impl<'de> Deserialize<'de> for Field {
+                fn deserialize<D>(deserializer: D) -> Result<Field, D::Error>
+                    where D: Deserializer<'de> {
+                        struct CCFieldVisitor;
+                        impl<'de> Visitor<'de> for CCFieldVisitor {
+                            type Value = Field;
+
+                            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                                formatter.write_str("`buffer`, `state`, or `index`")
+                            }
+
+                            fn visit_str<E>(self, value: &str) -> Result<Field,E>
+                                where E: de::Error {
+                                    match value {
+                                        "buffer" => Ok(Field::Buffer),
+                                        "state" => Ok(Field::State),
+                                        "index" => Ok(Field::Index),
+                                        _ => Err(de::Error::unknown_field(value, FIELDS))
+                                    }
+                                }
+                        }
+                        deserializer.deserialize_identifier(CCFieldVisitor)
+                    }
+            }
+
+            struct ChaChaVisitor;
+
+            fn wrap_u32(unwrapped: [u32; STATE_WORDS]) -> [w32;STATE_WORDS] {
+                let mut buf: [w32; STATE_WORDS] = Default::default();
+                for (i,&val) in unwrapped.into_iter().enumerate() {
+                    buf[i] = w(val);
+                }
+                buf
+            }
+
+            const FIELDS: &[&'static str] = &["buffer", "state", "index"];
+
+            impl<'de> Visitor<'de> for ChaChaVisitor {
+                type Value = ChaChaRng;
+
+                fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                    formatter.write_str("struct ChaChaRng")
+                }
+
+                fn visit_seq<V>(self, mut seq: V) -> Result<ChaChaRng, V::Error>
+                    where V: SeqAccess<'de> {
+                        let buffer: [u32; STATE_WORDS] = seq.next_element()?
+                            .ok_or_else(|| de::Error::invalid_length(0, &self))?;
+                        
+                        let state: [u32; STATE_WORDS] = seq.next_element()?
+                            .ok_or_else(|| de::Error::invalid_length(1, &self))?;
+                        
+                        let index = seq.next_element()?
+                            .ok_or_else(|| de::Error::invalid_length(2, &self))?;
+                        
+                        let buffer = wrap_u32(buffer);
+                        let state = wrap_u32(state);
+
+                        Ok(ChaChaRng {
+                            buffer, state, index
+                        })
+                }
+
+                fn visit_map<V>(self, mut map: V) -> Result<ChaChaRng, V::Error>
+                where V: MapAccess<'de>
+                {
+                    let mut buffer = None;
+                    let mut state = None;
+                    let mut index = None;
+
+                    while let Some(key) = map.next_key()? {
+                        match key {
+                            Field::Buffer => {
+                                if buffer.is_some() {
+                                    return Err(de::Error::duplicate_field("buffer"));
+                                }
+                                buffer = Some(map.next_value()?);
+                            }
+                            Field::State => {
+                                if state.is_some() {
+                                    return Err(de::Error::duplicate_field("state"));
+                                }
+                                state = Some(map.next_value()?);
+                            }
+                            Field::Index => {
+                                if index.is_some() {
+                                    return Err(de::Error::duplicate_field("index"));
+                                }
+                                index = Some(map.next_value()?);
+                            }
+                        }
+                    }
+                    let buffer = buffer.ok_or_else(|| de::Error::missing_field("buffer"))?;
+                    let state = state.ok_or_else(|| de::Error::missing_field("state"))?;
+                    let index = index.ok_or_else(|| de::Error::missing_field("index"))?;
+
+                    let buffer = wrap_u32(buffer);
+                    let state = wrap_u32(state);
+
+                    Ok(ChaChaRng {
+                        buffer, state, index
+                    })
+                }
+            }
+
+            de.deserialize_struct("ChaChaRng", FIELDS, ChaChaVisitor)
+        }
+}
 
 #[cfg(test)]
 mod test {
@@ -313,6 +465,32 @@ mod test {
         let mut clone = rng.clone();
         for _ in 0..16 {
             assert_eq!(rng.next_u64(), clone.next_u64());
+        }
+    }
+
+    #[cfg(feature="serde-1")]
+    #[test]
+    fn test_serde() {
+        use bincode;
+        use std::io::{BufWriter, BufReader};
+
+        let seed: &[_] = &[0, 1, 2, 3, 4, 5, 6, 7];
+        let mut rng: ChaChaRng = SeedableRng::from_seed(seed);
+
+        let buf: Vec<u8> = Vec::new();
+        let mut buf = BufWriter::new(buf);
+        bincode::serialize_into(&mut buf, &rng, bincode::Infinite).expect("Could not serialize");
+
+        let buf = buf.into_inner().unwrap();
+        let mut read = BufReader::new(&buf[..]);
+        let mut deserialized: ChaChaRng = bincode::deserialize_from(&mut read, bincode::Infinite).expect("Could not deserialize");
+
+        assert_eq!(rng.buffer, deserialized.buffer);
+        assert_eq!(rng.state, deserialized.state);
+        assert_eq!(rng.index, deserialized.index);
+
+        for _ in 0..16 {
+            assert_eq!(rng.next_u64(), deserialized.next_u64());
         }
     }
 }

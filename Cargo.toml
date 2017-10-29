@@ -16,12 +16,19 @@ categories = ["algorithms"]
 [features]
 i128_support = []
 nightly = ["i128_support"]
+serde-1 = ["serde", "serde_derive"]
 
 [dependencies]
 libc = "0.2"
+serde = {version="1",optional=true}
+serde_derive = {version="1", optional=true}
 
 [dev-dependencies]
 log = "0.3.0"
+# This is for testing serde, unfortunately
+# we can't specify feature-gated dev deps yet,
+# see: https://github.com/rust-lang/cargo/issues/1596
+bincode = "0.9"
 
 [workspace]
 members = ["rand-derive"]

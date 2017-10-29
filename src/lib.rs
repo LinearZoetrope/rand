@@ -246,6 +246,9 @@
 #![cfg_attr(feature = "i128_support", feature(i128_type))]
 
 #[cfg(test)] #[macro_use] extern crate log;
+#[cfg(test)] #[cfg(feature="serde-1")] extern crate bincode;
+#[cfg(feature="serde-1")] extern crate serde;
+#[cfg(feature="serde-1")] #[macro_use] extern crate serde_derive;
 
 
 use std::cell::RefCell;
