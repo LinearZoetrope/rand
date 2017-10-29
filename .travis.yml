@@ -18,6 +18,7 @@ matrix:
         - cargo doc --no-deps --features nightly
 script:
   - cargo test
+  - cargo test --features serde-1
   - cargo test --manifest-path rand-derive/Cargo.toml
 after_success:
   - travis-cargo --only nightly doc-upload
