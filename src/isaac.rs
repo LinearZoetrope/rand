@@ -40,11 +40,8 @@ pub struct IsaacRng {
     rsl: [w32; RAND_SIZE_USIZE],
     #[cfg_attr(feature="serde-1",serde(with="::isaac::rand_size_usize_serde"))]
     mem: [w32; RAND_SIZE_USIZE],
-    #[cfg_attr(feature="serde-1",serde(with="::serde_wrapping"))]
     a: w32,
-    #[cfg_attr(feature="serde-1",serde(with="::serde_wrapping"))]
     b: w32,
-    #[cfg_attr(feature="serde-1",serde(with="::serde_wrapping"))]
     c: w32,
 }
 
@@ -294,11 +291,8 @@ pub struct Isaac64Rng {
     rsl: [w64; RAND_SIZE_64],
     #[cfg_attr(feature="serde-1",serde(with="::isaac::rand_size_64_serde"))]
     mem: [w64; RAND_SIZE_64],
-    #[cfg_attr(feature="serde-1",serde(with="::serde_wrapping"))]
     a: w64,
-    #[cfg_attr(feature="serde-1",serde(with="::serde_wrapping"))]
     b: w64,
-    #[cfg_attr(feature="serde-1",serde(with="::serde_wrapping"))]
     c: w64,
 }
 
@@ -548,7 +542,7 @@ mod rand_size_usize_serde {
         let mut seq = ser.serialize_tuple(RAND_SIZE_USIZE)?;
 
         for e in arr.iter() {
-            seq.serialize_element(&e.0)?;
+            seq.serialize_element(&e)?;
         }
 
         seq.end()
@@ -571,7 +565,7 @@ mod rand_size_usize_serde {
             type Value = [Wrapping<T>; RAND_SIZE_USIZE];
 
             fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-                formatter.write_str("ChaCha state array")
+                formatter.write_str("Isaac state array")
             }
 
             #[inline]
@@ -583,7 +577,7 @@ mod rand_size_usize_serde {
 
                 for i in 0..RAND_SIZE_USIZE {
                     match seq.next_element()? {
-                        Some(val) => out[i] = Wrapping(val),
+                        Some(val) => out[i] = val,
                         None => return Err(de::Error::invalid_length(i, &self)),
                     };
                 }
@@ -616,7 +610,7 @@ mod rand_size_64_serde {
         let mut seq = ser.serialize_tuple(RAND_SIZE_64)?;
 
         for e in arr.iter() {
-            seq.serialize_element(&e.0)?;
+            seq.serialize_element(&e)?;
         }
 
         seq.end()
@@ -639,7 +633,7 @@ mod rand_size_64_serde {
             type Value = [Wrapping<T>; RAND_SIZE_64];
 
             fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-                formatter.write_str("ChaCha state array")
+                formatter.write_str("Isaac 64 state array")
             }
 
             #[inline]
@@ -651,7 +645,7 @@ mod rand_size_64_serde {
 
                 for i in 0..RAND_SIZE_64 {
                     match seq.next_element()? {
-                        Some(val) => out[i] = Wrapping(val),
+                        Some(val) => out[i] = val,
                         None => return Err(de::Error::invalid_length(i, &self)),
                     };
                 }

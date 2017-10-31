@@ -732,13 +732,9 @@ pub trait SeedableRng<Seed>: Rng {
 #[derive(Clone, Debug)]
 #[cfg_attr(feature="serde-1",derive(Serialize,Deserialize))]
 pub struct XorShiftRng {
-    #[cfg_attr(feature="serde-1",serde(with="::serde_wrapping"))]
     x: w32,
-    #[cfg_attr(feature="serde-1",serde(with="::serde_wrapping"))]
     y: w32,
-    #[cfg_attr(feature="serde-1",serde(with="::serde_wrapping"))]
     z: w32,
-    #[cfg_attr(feature="serde-1",serde(with="::serde_wrapping"))]
     w: w32,
 }
 
@@ -1053,29 +1049,6 @@ pub fn sample<T, I, R>(rng: &mut R, iterable: I, amount: usize) -> Vec<T>
         }
     }
     reservoir
-}
-
-#[cfg(feature="serde-1")]
-mod serde_wrapping {
-    use serde::{Deserialize, Deserializer, Serialize, Serializer};
-
-    use std::num::Wrapping;
-
-    pub fn serialize<T, S>(w: &Wrapping<T>, ser: S) -> Result<S::Ok, S::Error> 
-    where
-        T: Serialize,
-        S: Serializer 
-    {
-        w.0.serialize(ser)
-    }
-
-    pub fn deserialize<'de, T, D>(de: D) -> Result<Wrapping<T>, D::Error>
-    where
-        T: Deserialize<'de>,
-        D: Deserializer<'de>,
-    {
-        Deserialize::deserialize(de).map(Wrapping)
-    }
 }
 
 #[cfg(test)]

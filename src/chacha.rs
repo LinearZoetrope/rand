@@ -29,9 +29,7 @@ const CHACHA_ROUNDS: u32 = 20; // Cryptographically secure from 8 upwards as of 
 #[derive(Copy, Clone, Debug)]
 #[cfg_attr(feature="serde-1", derive(Serialize,Deserialize))]
 pub struct ChaChaRng {
-    #[cfg_attr(feature="serde-1",serde(with="::chacha::state_words_serde"))]
     buffer:  [w32; STATE_WORDS], // Internal buffer of output
-    #[cfg_attr(feature="serde-1",serde(with="::chacha::state_words_serde"))]
     state:   [w32; STATE_WORDS], // Initial state
     index:   usize,                 // Index into state
 }
@@ -228,74 +226,6 @@ impl Rand for ChaChaRng {
             *word = other.gen();
         }
         SeedableRng::from_seed(&key[..])
-    }
-}
-
-#[cfg(feature="serde-1")]
-mod state_words_serde {
-    use super::STATE_WORDS;
-    use serde::{Deserialize, Deserializer, Serialize, Serializer};
-    use serde::de::{Visitor,SeqAccess};
-    use serde::de;
-
-    use std::num::Wrapping;
-    use std::fmt;
-
-    pub fn serialize<T, S>(arr: &[Wrapping<T>;STATE_WORDS], ser: S) -> Result<S::Ok, S::Error> 
-    where
-        T: Serialize,
-        S: Serializer 
-    {
-        use serde::ser::SerializeTuple;
-
-        let mut seq = ser.serialize_tuple(STATE_WORDS)?;
-
-        for e in arr {
-            seq.serialize_element(&e.0)?;
-        }
-
-        seq.end()
-    }
-
-    #[inline]
-    pub fn deserialize<'de, T, D>(de: D) -> Result<[Wrapping<T>;STATE_WORDS], D::Error>
-    where
-        T: Deserialize<'de>+Default+Copy,
-        D: Deserializer<'de>,
-    {
-        use std::marker::PhantomData;
-        struct ArrayVisitor<T> {
-            _pd: PhantomData<T>,
-        };
-        impl<'de,T> Visitor<'de> for ArrayVisitor<T>
-        where
-            T: Deserialize<'de>+Default+Copy
-        {
-            type Value = [Wrapping<T>; STATE_WORDS];
-
-            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-                formatter.write_str("ChaCha state array")
-            }
-
-            #[inline]
-            fn visit_seq<A>(self, mut seq: A) -> Result<[Wrapping<T>; STATE_WORDS], A::Error>
-            where
-                A: SeqAccess<'de>,
-            {
-                let mut out = [Wrapping(Default::default());STATE_WORDS];
-
-                for i in 0..STATE_WORDS {
-                    match seq.next_element()? {
-                        Some(val) => out[i] = Wrapping(val),
-                        None => return Err(de::Error::invalid_length(i, &self)),
-                    };
-                }
-
-                Ok(out)
-            }
-        }
-
-        de.deserialize_tuple(STATE_WORDS, ArrayVisitor{_pd: PhantomData})
     }
 }
 
